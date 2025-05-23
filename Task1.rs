@@ -9,6 +9,8 @@ fn function(x: f64) -> f64 {
         (3.0 * x - 9.0) / 5.0
     } else if (8.0 <= x) && (x <= 10.0) {
         3.0
+    } else {
+        f64::NAN
     }
 }
 
