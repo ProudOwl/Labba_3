@@ -1,71 +1,75 @@
 #include <iostream>
 #include <cmath>
+#include <numeric>
+#include <limits>
+
 using namespace std;
 
-int gsd(int a, int b) {
+// Функция для проверки, является ли число рациональным
+bool is_rational(double sum, long long max_denominator = 1000) {
+    for (long long denom = 1; denom <= max_denominator; ++denom) {
+        double numerator = round(sum * denom);
+        if (fabs(numerator / denom - sum) < 1e-9) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Функция для вычисления НОД
+long long gcd(long long a, long long b) {
     while (b != 0) {
-        int r = a % b;
-        a = b;
-        b = r;
+        long long temp = b;
+        b = a % b;
+        a = temp;
     }
     return a;
+}
+
+// Функция для представления числа в виде дроби
+void to_fraction(double sum, long long &numerator, long long &denominator, long long max_denominator = 1000) {
+    for (denominator = 1; denominator <= max_denominator; ++denominator) {
+        numerator = round(sum * denominator);
+        if (fabs(static_cast<double>(numerator) / denominator - sum) < 1e-9) {
+            long long common_divisor = gcd(abs(numerator), denominator);
+            numerator /= common_divisor;
+            denominator /= common_divisor;
+            return;
+        }
+    }
+    numerator = round(sum);
+    denominator = 1;
 }
 
 int main() {
     int a, b;
     cin >> a >> b;
-    if (b == 1) {
-        cout << "Infinity" << endl;
+
+    // Проверка сходимости по признаку Даламбера
+    if (b <= 1) {
+        cout << "infinity" << endl;
+        return 0;
     }
 
-    int numerator, denominator;
+    // Численное приближение суммы ряда
+    double sum = 0.0;
+    double epsilon = 1e-10; // Точность
+    double term;
+    int n = 1;
+    do {
+        term = pow(n, a) / pow(b, n);
+        sum += term;
+        n++;
+    } while (term > epsilon);
 
-    switch (a) {
-        case 1:
-            numerator = b;
-            denominator = pow(b - 1, 2);
-            break;
-        case 2:
-            numerator = b * (b + 1);
-            denominator = pow(b - 1, 3);
-            break;
-        case 3:
-            numerator = b * (pow(b, 2) + 4*b + 1);
-            denominator = pow(b - 1, 4);
-            break;
-        case 4:
-            numerator = b * (pow(b, 3) + 11*pow(b, 2) + 11*b + 1);
-            denominator = pow(b - 1, 5);
-            break;
-        case 5:
-            numerator = b * (pow(b, 4) + 26*pow(b, 3) + 66*pow(b, 2) + 26*b + 1);
-            denominator = pow(b - 1, 6);
-            break;
-        case 6:
-            numerator = b * (pow(b, 5) + 57*pow(b, 4) + 302*pow(b, 3) + 302*pow(b, 2) + 57*b + 1);
-            denominator = pow(b - 1, 7);
-            break;
-        case 7:
-            numerator = b * (pow(b, 6) + 120*pow(b, 5) + 1191*pow(b, 4) + 2416*pow(b, 3) + 1191*pow(b, 2) + 120*b + 1);
-            denominator = pow(b - 1, 8);
-            break;
-        case 8:
-            numerator = b * (pow(b, 7) + 247*pow(b, 6) + 4293*pow(b, 5) + 15619*pow(b, 4) + 15619*pow(b, 3) + 4293*pow(b, 2) + 247*b + 1);
-            denominator = pow(b - 1, 9);
-            break;
-        case 9:
-            numerator = b * (pow(b, 8) + 502*pow(b, 7) + 14608*pow(b, 6) + 88234*pow(b, 5) + 156190*pow(b, 4) + 88234*pow(b, 3) + 14608*pow(b, 2) + 502*b + 1);
-            denominator = pow(b - 1, 10);
-            break;
-        case 10:
-            numerator = b * (pow(b, 9) + 1013*pow(b, 8) + 47840*pow(b, 7) + 455192*pow(b, 6) + 1310354*pow(b, 5) + 1310354*pow(b, 4) + 455192*pow(b, 3) + 47840*pow(b, 2) + 1013*b + 1);
-            denominator = pow(b - 1, 11);
-            break;
+    // Проверка на рациональность
+    if (is_rational(sum)) {
+        long long numerator, denominator;
+        to_fraction(sum, numerator, denominator);
+        cout << numerator << "/" << denominator << endl;
+    } else {
+        cout << "irrational" << endl;
     }
 
-    int divider = gsd(numerator, denominator);
-    numerator /= divider;
-    denominator /= divider;
-    cout << numerator << "/" << denominator << endl;
     return 0;
 }
