@@ -4,41 +4,48 @@
 #include <random>
 #include <cmath>
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <chrono>
+
 using namespace std;
 
-// генерация случайного числа
+mutex mtx;
+atomic<bool> stop_flag(false);
+
 int random_int(int min, int max) {
     static mt19937 gen(random_device{}());
     uniform_int_distribution<int> dist(min, max);
     return dist(gen);
 }
 
-// модульное возведение в степень
-uint64_t mod_pow(uint64_t a, uint64_t b, uint64_t p) {
+uint64_t mod_pow(uint64_t a, uint64_t b, uint64_t n) {
     uint64_t result = 1;
-    a %= p;
-
+    a %= n;
+    
     while (b > 0) {
-        if (b % 2 == 1)
-            result = (result * a) % p;
+        if (b % 2 == 1) {
+            result = (result * a) % n;
+        }
         b >>= 1;
-        a = (a * a) % p;
+        a = (a * a) % n;
     }
     return result;
 }
 
-// решето Эратосфена
-vector<int> eratochene(int limit) {
+vector<int> eratosthenes_sieve(int limit) {
     vector<bool> is_prime(limit + 1, true);
     is_prime[0] = is_prime[1] = false;
-
+    
     for (int p = 2; p * p <= limit; ++p) {
         if (is_prime[p]) {
-            for (int i = p * p; i <= limit; i += p)
+            for (int i = p * p; i <= limit; i += p) {
                 is_prime[i] = false;
+            }
         }
     }
-
+    
     vector<int> primes;
     for (int i = 2; i <= limit; ++i) {
         if (is_prime[i]) primes.push_back(i);
@@ -46,150 +53,163 @@ vector<int> eratochene(int limit) {
     return primes;
 }
 
-bool test_ferma(int a, int x, int p) {
-    return mod_pow(a, x, p) == 1;
-}
-
-int generate_N(int k, int q, int e) {
-    int N = ceil(pow(2, k - 1) / q) + ceil((pow(2, k - 1) * e) / q);
-    return (N % 2 == 0) ? N : N + 1;
-}
-
-// тест Диемитко
-bool diemitko_test(int64_t p, int t, int N, int u) {
-    for (int i = 0; i < t; ++i) {
-        if (!test_ferma(2, p - 1, p)) return false;
-        if (test_ferma(2, N + u, p)) return false;
+bool is_prime_simple(int n) {
+    if (n <= 1) return false;
+    if (n <= 3) return true;
+    if (n % 2 == 0 || n % 3 == 0) return false;
+    
+    for (int i = 5; i * i <= n; i += 6) {
+        if (n % i == 0 || n % (i + 2) == 0) {
+            return false;
+        }
     }
     return true;
 }
 
-// проверка количества бит в числе
-int bit_count(uint64_t num) {
-    return num == 0 ? 1 : static_cast<int>(log2(num)) + 1;
+bool diemitko_test(int64_t n, int N, int u) {
+    // Проверка 1: 2^(N+u) mod n != 1
+    if (mod_pow(2, N + u, n) == 1) {
+        return false;
+    }
+    
+    // Проверка 2: 2^(n-1) mod n == 1
+    return mod_pow(2, n - 1, n) == 1;
 }
 
-// проверка соответствия числа заданному диапазону бит
-int check_bit_range(int num, int target_bits, int tolerance) {
-    int bits = bit_count(num);
-    if (bits < target_bits - tolerance) return 1;
-    if (bits > target_bits + tolerance) return 2;
-    return 3;
+bool is_in_bit_range(int number, int target_bits, int tolerance = 0) {
+    if (number == 0) return false;
+    int actual_bits = static_cast<int>(log2(number)) + 1;
+    return actual_bits >= target_bits - tolerance && 
+           actual_bits <= target_bits + tolerance;
 }
 
-// функция генерации простого числа
-bool generate_prime(int k, vector<int>& primes, vector<int>& results, vector<string>& statuses, vector<int>& attempts) {
-    const int target_q_bits = k / 2;
-    int tolerance = (k < 10) ? (k <= 5 ? 2 : 1) : 0;
-
-    int q, N, u = 0, e = 0, p;
-    int local_attempts = 0;
-
-    while (true) {
+bool generate_prime(int k, const vector<int>& primes, vector<int>& numbers, vector<string>& results, vector<int>& attempts) {
+    const int q_bits = k / 2;
+    const int tolerance = k < 10 ? (k <= 5 ? 2 : 1) : 0;
+    int q, N, u = 0, p;
+    int max_attempts = 1000;
+    int attempt_count = 0;
+    
+    uint64_t upper_bound = (1ULL << k) - 1;
+    uint64_t lower_bound = 1ULL << (k - 1);
+    
+    while (!stop_flag && attempt_count < max_attempts) {
         q = primes[random_int(0, primes.size() - 1)];
-
-        if (check_bit_range(q, target_q_bits, tolerance) == 3) {
-            N = generate_N(k, q, e);
-            p = (N + u) * q + 1;
-
-            if (check_bit_range(p, k, tolerance) != 2 && diemitko_test(p, 1, N, u)) {
-                break;
-            }
-            u += 2;
-            local_attempts++;
+        if (!is_in_bit_range(q, q_bits, tolerance)) continue;
+        
+        // Вычисляем N
+        N = ((1 << (k-1)) / q);
+        if (N % 2 != 0) N++;
+        
+        p = (N + u) * q + 1;
+        
+        if (p > upper_bound) {
+            u = 0;
+            attempt_count++;
+            continue;
         }
-    }
-
-    // проверка на уникальность
-    while (find(results.begin(), results.end(), p) != results.end()) {
-        u = 0;
-        local_attempts = 0;
-
-        while (true) {
-            q = primes[random_int(0, primes.size() - 1)];
-
-            if (check_bit_range(q, target_q_bits, tolerance) == 3) {
-                N = generate_N(k, q, e);
-                p = (N + u) * q + 1;
-
-                if (check_bit_range(p, k, tolerance) != 2 && diemitko_test(p, 1, N, u)) {
-                    break;
+        
+        if (p >= lower_bound && p <= upper_bound) {
+            if (is_prime_simple(p) && diemitko_test(p, N, u)) {
+                lock_guard<mutex> lock(mtx);
+                
+                if (find(numbers.begin(), numbers.end(), p) == numbers.end()) {
+                    numbers.push_back(p);
+                    results.push_back("+");
+                    attempts.push_back(u);
+                    return true;
                 }
-                u += 2;
-                local_attempts++;
             }
         }
+        u += 2;
+        attempt_count++;
     }
-
-    // тестирование надежности
-    int error_count = 0;
-    int iterations = 1;
-
-    while (true) {
-        error_count = 0;
-        for (int i = 0; i < 100; ++i) {
-            if (!diemitko_test(p, iterations, N, u)) error_count++;
-        }
-
-        if (error_count <= 10) break;
-        iterations++;
-    }
-
-    results.push_back(p);
-    statuses.push_back(error_count <= 10 ? "+" : "-");
-    attempts.push_back(local_attempts);
-
-    return true;
+    return false;
 }
 
-// Функция для безопасного ввода числа
-int get_valid_input(const string& prompt, int min_val, int max_val) {
+int valid_input(const string& prompt, int min_val, int max_val) {
     int value;
     while (true) {
         cout << prompt;
-        if (cin >> value && value >= min_val && value <= max_val) {
+        cin >> value;
+        if (cin.fail() || value < min_val || value > max_val) {
+            cin.clear();
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            return value;
+            cout << "Ошибка. Введите число от " << min_val << " до " << max_val << "\n";
+        } else {
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            break;
         }
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        cout << "Неверный ввод. Введите число от " << min_val << " до " << max_val << "\n";
     }
+    return value;
 }
 
 int main() {
-    int t = get_valid_input("Введите размерность простого числа (4-20): ", 4, 20);
-
-    vector<int> primes = eratochene(500);
-    cout << "\nПростые числа до 500:\n";
+    int t = valid_input("Введите размерность простого числа (4-19): ", 4, 19);
+    
+    vector<int> primes = eratosthenes_sieve(500);
+    cout << "\nПростые числа до 500 (Решето Эратосфена):\n";
     for (size_t i = 0; i < primes.size(); ++i) {
         cout << primes[i] << (i % 10 == 9 ? "\n" : " ");
     }
     cout << "\n\n";
 
-    vector<int> results;
-    vector<string> statuses;
+    vector<int> numbers;
+    vector<string> results;
     vector<int> attempts;
-
-    // Генерация 10 простых чисел
-    for (int i = 0; i < 10; ++i) {
-        generate_prime(t, primes, results, statuses, attempts);
+    
+    vector<thread> threads;
+    const int target_count = 10;
+    const int num_threads = min(4, static_cast<int>(thread::hardware_concurrency()));
+    
+    for (int i = 0; i < num_threads; ++i) {
+        threads.emplace_back([&, i]() {
+            while (!stop_flag && numbers.size() < target_count) {
+                generate_prime(t, primes, numbers, results, attempts);
+            }
+        });
     }
-
-    // Вывод результатов
-    cout << "Простые числа, созданные с помощью ГОСТ:\n\n";
-
+    
+    auto start = chrono::steady_clock::now();
+    while (chrono::steady_clock::now() - start < chrono::seconds(10)) {
+        if (numbers.size() >= target_count) {
+            break;
+        }
+        this_thread::sleep_for(chrono::milliseconds(100));
+    }
+    stop_flag = true;
+    
+    for (auto& t : threads) {
+        if (t.joinable()) t.join();
+    }
+    
+    cout << "\nРезультаты генерации простых чисел (" << t << " бит):\n\n";
+    
     cout << "|    Num    |";
-    for (int i = 1; i <= 10; ++i) cout << setw(6) << i << " |";
-
-    cout << "\n\n|     P     |";
-    for (int i = 0; i < 10; ++i) cout << setw(6) << results[i] << " |";
-
-    cout << "\n\n| Результат |";
-    for (int i = 0; i < 10; ++i) cout << setw(6) << statuses[i] << " |";
-
-    cout << "\n\n|     K     |";
-    for (int i = 0; i < 10; ++i) cout << setw(6) << attempts[i] << " |";
-
+    for (size_t i = 0; i < numbers.size(); ++i) {
+        cout << setw(6) << i+1 << " |";
+    }
+    
+    cout << "\n|-----------|";
+    for (size_t i = 0; i < numbers.size(); ++i) {
+        cout << "-------|";
+    }
+    
+    cout << "\n|     P     |";
+    for (int num : numbers) {
+        cout << setw(6) << num << " |";
+    }
+    
+    cout << "\n| Результат |";
+    for (const string& res : results) {
+        cout << setw(6) << res << " |";
+    }
+    
+    cout << "\n|     K     |";
+    for (int att : attempts) {
+        cout << setw(6) << att << " |";
+    }
+    cout << endl;
+    
     return 0;
 }
