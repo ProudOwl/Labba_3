@@ -1,57 +1,103 @@
 use std::io;
-use std::cmp;
 
-fn gsd(a: i32, b: i32) -> i32 {
-    let mut a = a;
-    let mut b = b;
+// Реализация gcd
+fn gcd(a: i64, b: i64) -> i64 {
+    let mut a = a.abs();
+    let mut b = b.abs();
     while b != 0 {
-        let r = a % b;
-        a = b;
-        b = r;
+        let temp = b;
+        b = a % b;
+        a = temp;
     }
     a
 }
 
-fn pow(base: i32, exponent: i32) -> i32 {
-    base.pow(exponent as u32)
+// Функция для проверки, является ли число рациональным
+fn is_rational(sum: f64, max_denominator: i64) -> bool {
+    for denom in 1..=max_denominator {
+        let numerator = (sum * denom as f64).round();
+        if (numerator / denom as f64 - sum).abs() < 1e-9 {
+            return true;
+        }
+    }
+    false
+}
+
+// Функция для представления числа в виде дроби
+fn to_fraction(sum: f64, max_denominator: i64) -> (i64, i64) {
+    for denominator in 1..=max_denominator {
+        let numerator = (sum * denominator as f64).round() as i64;
+        if (numerator as f64 / denominator as f64 - sum).abs() < 1e-9 {
+            let common_divisor = gcd(numerator.abs(), denominator);
+            return (numerator / common_divisor, denominator / common_divisor);
+        }
+    }
+    (sum.round() as i64, 1)
 }
 
 fn main() {
     let mut input = String::new();
     io::stdin().read_line(&mut input).expect("Failed to read input");
-    let parts: Vec<i32> = input
-        .trim()
-        .split_whitespace()
-        .map(|x| x.parse().expect("Not an integer!"))
-        .collect();
     
-    let a = parts[0];
-    let b = parts[1];
-    
-    if b == 1 {
-        println!("Infinity");
+    // Проверка на пустой ввод
+    if input.trim().is_empty() {
+        println!("Please enter two numbers separated by space");
         return;
     }
     
-    let (numerator, denominator) = match a {
-        1 => (b, pow(b - 1, 2)),
-        2 => (b * (b + 1), pow(b - 1, 3)),
-        3 => (b * (pow(b, 2) + 4*b + 1), pow(b - 1, 4)),
-        4 => (b * (pow(b, 3) + 11*pow(b, 2) + 11*b + 1), pow(b - 1, 5)),
-        5 => (b * (pow(b, 4) + 26*pow(b, 3) + 66*pow(b, 2) + 26*b + 1), pow(b - 1, 6)),
-        6 => (b * (pow(b, 5) + 57*pow(b, 4) + 302*pow(b, 3) + 302*pow(b, 2) + 57*b + 1), pow(b - 1, 7)),
-        7 => (b * (pow(b, 6) + 120*pow(b, 5) + 1191*pow(b, 4) + 2416*pow(b, 3) + 1191*pow(b, 2) + 120*b + 1), pow(b - 1, 8)),
-        8 => (b * (pow(b, 7) + 247*pow(b, 6) + 4293*pow(b, 5) + 15619*pow(b, 4) + 15619*pow(b, 3) + 4293*pow(b, 2) + 247*b + 1), pow(b - 1, 9)),
-        9 => (b * (pow(b, 8) + 502*pow(b, 7) + 14608*pow(b, 6) + 88234*pow(b, 5) + 156190*pow(b, 4) + 88234*pow(b, 3) + 14608*pow(b, 2) + 502*b + 1), pow(b - 1, 10)),
-        10 => (b * (pow(b, 9) + 1013*pow(b, 8) + 47840*pow(b, 7) + 455192*pow(b, 6) + 1310354*pow(b, 5) + 1310354*pow(b, 4) + 455192*pow(b, 3) + 47840*pow(b, 2) + 1013*b + 1), pow(b - 1, 11)),
-        _ => {
-            println!("Invalid input for a");
-            return;
+    let nums: Vec<i32> = input
+        .split_whitespace()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    // Проверка, что введено ровно два числа
+    if nums.len() != 2 {
+        println!("Please enter exactly two numbers separated by space");
+        return;
+    }
+
+    let (a, b) = (nums[0], nums[1]);
+
+    // Проверка сходимости по признаку Даламбера
+    if b <= 1 {
+        println!("infinity");
+        return;
+    }
+
+    // Численное приближение суммы ряда с защитой от переполнения
+    let mut sum = 0.0;
+    let epsilon = 1e-10;
+    let mut term;
+    let mut n: i32 = 1;
+    loop {
+        let numerator = match n.checked_pow(a as u32) {
+            Some(val) => val as f64,
+            None => {
+                break;
+            }
+        };
+        
+        let denominator = match b.checked_pow(n as u32) {
+            Some(val) => val as f64,
+            None => {
+                break;
+            }
+        };
+        
+        term = numerator / denominator;
+        sum += term;
+        n += 1;
+        
+        if term <= epsilon {
+            break;
         }
-    };
-    
-    let divider = gsd(numerator, denominator);
-    let numerator = numerator / divider;
-    let denominator = denominator / divider;
-    println!("{}/{}", numerator, denominator);
+    }
+
+    // Проверка на рациональность
+    if is_rational(sum, 1000) {
+        let (numerator, denominator) = to_fraction(sum, 1000);
+        println!("{}/{}", numerator, denominator);
+    } else {
+        println!("irrational");
+    }
 }
